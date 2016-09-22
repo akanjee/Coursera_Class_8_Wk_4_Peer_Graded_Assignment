@@ -1,0 +1,128 @@
+---
+title: "C8_PML_W4_A"
+author: "Amyn"
+date: "September 19, 2016"
+output: html_document
+---
+
+# What to Submit
+
+* A link to a Github repo with your R markdown and compiled HTML file describing your analysis. 
+* Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. 
+* Submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).
+
+# Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. 
+
+These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+# Data & Package Loading
+
+## Package Loading
+```{r}
+library(caret)      ### Load the CARET Package for modeling
+library(ggplot2)    ### Load the GGPLOT2 Package for Data Visualization and Analysis
+set.seed(1234)      ### Set seed so that we can ensure that we can recreate our results for testing purposes
+library(data.table)
+library(quantmod)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+setwd("~/Documents/R Working Directory/Course_8_Practical_Machine_Learning")    ### Set the Working Directory 
+
+```
+
+## Load the Data
+The training and test data for this project are available using the following links:
+* https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+* https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+```{r}
+
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+f <- file.path(getwd(), "pml-training.csv")
+ download.file(url, f)  ### Commenting out the download to simplify testing
+train<- read.csv(f, na.strings = c("NA","#DIV/0!", ""))
+
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+f <- file.path(getwd(), "pml-testing.csv")
+ download.file(url, f) ### Commenting out the download to simplify the testing
+validation<- read.csv(f, na.strings = c("NA","#DIV/0!", ""))
+```
+
+# Data Cleansing + Transformation
+We will remove all of the columns that nothing by NAs and we will also eliminate the first 7 columns as they don't provide quantitative data for the model
+```{r}
+#dim(train)
+#dim(validation)
+train<-train[,colSums(is.na(train)) == 0]   ### Remove all columns that have nothing but NAs - there column sum will not be 0
+validation <-validation[,colSums(is.na(validation)) == 0]     ### Remove all columns that have nothing but NAs - there column sum will not be 0
+train <- train[,-c(1:7)]    ### Remove the first 7 columns of qualitative data as they are not required for our model
+validation <-validation[,-c(1:7)]       ### Remove the first 7 columns of qualitative data as they are not required for our model
+#dim(train)
+#dim(validation)
+
+```
+
+We will now  partition the training set for cross validation testing activitie
+```{r}
+
+inTrain <-createDataPartition(y=train$classe, p = 0.75, list = FALSE)
+subTrain <- train[inTrain,] ### Create our Training Set
+subTest <-train[-inTrain,]  ### Create our Testing Set
+#dim(subTrain)
+#dim(subTest)
+
+```
+
+
+# Modeling
+We will use the RandomForest model to simulate our results first.
+
+```{r}
+
+mod_rf <- train(classe ~ ., data = subTrain, method = "rf", trControl = trainControl(method="cv"), number = 3)
+mod_rf$finalModel
+```
+We will also look to see what are the most and least important variables for our model
+```{r}
+varImpObj <- varImp(mod_rf)
+plot(varImpObj, main = "Importance Variables", top = (ncol(subTrain)-1))
+```
+So we can see that the ROLL_BELT, YAW_BELT & MAGNET_DUBMBELL_Z are the most important, while the GYROS_ARM_Z, GYROS_FOREARM_X and GYROS_DUMBELL_Z are the least imporant in our prediction model.
+
+We will then do the Prediction and review the accuracy and cross correlation with our test data set
+```{r}
+pred_rf_T <- predict(mod_rf, subTest)
+confusionMatrix(pred_rf_T,subTest$classe)
+```
+From the test we can see that the RandomForest Model works very well our test data set with an Accuracy of 99.4% and a Confidence Interval of 99.1% to 99.6%.  
+
+# Final Validation & Output
+We will now do a final validation of the model using the validation data set and output the results to a set of final for confirmation
+```{r}
+pred_rf_V <-predict(mod_rf,validation)
+pred_rf_V
+
+answers <- as.vector(pred_rf_V)
+
+pml_write_files = function(x) {
+    n = length(x)
+    for (i in 1:n) {
+        filename = paste0("problem_id_", i, ".txt")
+        write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, 
+            col.names = FALSE)
+    }
+}
+pml_write_files(answers)
+```
+
+# Acknowledgements
+
+* Data from this project was sourced from http://groupware.les.inf.puc-rio.br/har
+
+
+
